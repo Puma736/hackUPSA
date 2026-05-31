@@ -1,0 +1,6 @@
+{
+  "name": "Calendario Vivo del Bosque Chiquitano",
+  "description": "Calendario vivo e interactivo de productos del bosque chiquitano para conectar productores con el sector gastronómico, chefs y restaurantes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

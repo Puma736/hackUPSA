@@ -1,0 +1,67 @@
+/**
+ * Typings for the live calendar of the Chiquitano Forest Products app.
+ * Part of Innova Hack Santa Cruz challenge - Fundación Amigos de la Naturaleza (FAN).
+ */
+
+export interface Contact {
+  id: string;
+  name: string;
+  role: string;
+  type: "Asociación" | "Productor" | "Tienda" | "Proveedor";
+  phone: string;
+  location: string;
+}
+
+export interface Recipe {
+  id: string;
+  title: string;
+  description: string;
+  ingredients: string[];
+  instructions: string[];
+  servings: string;
+  difficulty: "Fácil" | "Medio" | "Avanzado";
+  image?: string;
+}
+
+export type ProductStatus = "En Temporada" | "Comienza Pronto" | "Termina Pronto" | "Fuera de Temporada";
+
+export interface Product {
+  id: string;
+  name: string;
+  scientificName: string;
+  description: string;
+  characteristics: string[];
+  category: "Semilla/Nuez" | "Palmera/Fruto" | "Aceite/Aceituna/Resina" | "Fruta Silvestre" | "Túberculo/Raíz/Otros";
+  seasonMonths: number[]; // 1 = January, ..., 12 = December
+  contacts: Contact[];
+  gastronomicUses: string[];
+  recipes: Recipe[];
+  origin: {
+    town: string;
+    department: string;
+    lat: number; // For plotting on geographic map
+    lng: number; // For plotting on geographic map
+    mapsUrl?: string; // Google Maps location link
+  };
+  imageUrl: string;
+}
+
+export interface SystemAlert {
+  id: string;
+  productId: string;
+  productName: string;
+  type: "start" | "end" | "soon";
+  message: string;
+  date: string;
+}
+
+export interface Subscriber {
+  name?: string;
+  email?: string;
+  phone?: string;
+  channels: ("email" | "whatsapp")[];
+  interestedCategories?: string[];
+  interestedProductId?: string;
+  acceptedTerms?: boolean;
+  createdAt?: string;
+}

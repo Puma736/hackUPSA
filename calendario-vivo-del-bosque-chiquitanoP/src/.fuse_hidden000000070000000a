@@ -1,0 +1,2194 @@
+import React, { useState, useEffect } from "react";
+import {
+  Calendar,
+  Search,
+  Filter,
+  MapPin,
+  User,
+  Mail,
+  Phone,
+  Plus,
+  Edit2,
+  Trash2,
+  Sparkles,
+  ChefHat,
+  BookOpen,
+  Bell,
+  ArrowRight,
+  X,
+  CheckCircle2,
+  Globe,
+  SlidersHorizontal,
+  Lock,
+  Heart,
+  Share2,
+  ChevronRight,
+  Info,
+  Check,
+  Smartphone,
+  Home
+} from "lucide-react";
+import { Product, Contact, Recipe, ProductStatus, SystemAlert, Subscriber } from "./types";
+import { INITIAL_PRODUCTS, MONTH_NAMES, CATEGORIES } from "./data";
+import InteractiveMap from "./components/InteractiveMap";
+import AiChef from "./components/AiChef";
+import Logo, { LogoMark } from "./components/Logo";
+
+
+export default function App() {
+  // Database State with localStorage support
+  const [products, setProducts] = useState<Product[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+
+  // Simulated Time (Month 1-12). Default to May (5) as per current metadata May 2026
+  const [simulatedMonth, setSimulatedMonth] = useState<number>(5);
+
+  // Search & Filters
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("Todos");
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>("Todos");
+
+  // Mode View tabs: "home" | "catalog" | "map" | "chef" | "admin"
+  const [activeTab, setActiveTab] = useState<"home" | "catalog" | "map" | "chef" | "admin">("home");
+
+  // Home slide index (products list)
+  const [homeSlideIndex, setHomeSlideIndex] = useState<number>(0);
+  // Modal for displaying recipe details
+  const [selectedHomeRecipe, setSelectedHomeRecipe] = useState<any | null>(null);
+
+  // Subscriber Form
+  const [subscriberName, setSubscriberName] = useState<string>("");
+  const [subscriberEmail, setSubscriberEmail] = useState<string>("");
+  const [subscriberPhone, setSubscriberPhone] = useState<string>("");
+  const [subChannels, setSubChannels] = useState<("email" | "whatsapp")[]>(["email"]);
+  const [subTerms, setSubTerms] = useState<boolean>(false);
+  const [subStatus, setSubStatus] = useState<"idle" | "success">("idle");
+  const [lastSub, setLastSub] = useState<Subscriber | null>(null);
+
+  // Auth (simulated, persisted in localStorage)
+  const [authUser, setAuthUser] = useState<{ name: string; email: string; isAdmin?: boolean } | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authName, setAuthName] = useState<string>("");
+  const [authEmail, setAuthEmail] = useState<string>("");
+  const [authPassword, setAuthPassword] = useState<string>("");
+  const [authError, setAuthError] = useState<string>("");
+
+  // Admin Panel State
+  const [isAdminMode, setIsAdminMode] = useState<boolean>(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [showAdminForm, setShowAdminForm] = useState<boolean>(false);
+
+  // Form Fields for Add/Edit Product
+  const [formName, setFormName] = useState<string>("");
+  const [formScientificName, setFormScientificName] = useState<string>("");
+  const [formDescription, setFormDescription] = useState<string>("");
+  const [formCategory, setFormCategory] = useState<Product["category"]>("Semilla/Nuez");
+  const [formCharacteristics, setFormCharacteristics] = useState<string>("");
+  const [formSeasonMonths, setFormSeasonMonths] = useState<number[]>([]);
+  const [formUses, setFormUses] = useState<string>("");
+  const [formTown, setFormTown] = useState<string>("Concepción");
+  const [formLat, setFormLat] = useState<number>(40);
+  const [formLng, setFormLng] = useState<number>(50);
+
+  // Nested form creation state
+  const [formContacts, setFormContacts] = useState<Contact[]>([]);
+  const [newContactName, setNewContactName] = useState<string>("");
+  const [newContactRole, setNewContactRole] = useState<string>("");
+  const [newContactType, setNewContactType] = useState<Contact["type"]>("Asociación");
+  const [newContactPhone, setNewContactPhone] = useState<string>("");
+  const [newContactLocation, setNewContactLocation] = useState<string>("");
+
+  const [formRecipes, setFormRecipes] = useState<Recipe[]>([]);
+  const [newRecipeTitle, setNewRecipeTitle] = useState<string>("");
+  const [newRecipeDesc, setNewRecipeDesc] = useState<string>("");
+  const [newRecipeIngredients, setNewRecipeIngredients] = useState<string>("");
+  const [newRecipeInstructions, setNewRecipeInstructions] = useState<string>("");
+  const [newRecipeServings, setNewRecipeServings] = useState<string>("4 porciones");
+  const [newRecipeDifficulty, setNewRecipeDifficulty] = useState<Recipe["difficulty"]>("Fácil");
+
+  // Load from LocalStorage
+  useEffect(() => {
+    const savedProducts = localStorage.getItem("fan_chiquitano_products");
+    if (savedProducts) {
+      try {
+        setProducts(JSON.parse(savedProducts));
+      } catch (e) {
+        setProducts(INITIAL_PRODUCTS);
+      }
+    } else {
+      setProducts(INITIAL_PRODUCTS);
+      localStorage.setItem("fan_chiquitano_products", JSON.stringify(INITIAL_PRODUCTS));
+    }
+  }, []);
+
+  // Sync to LocalStorage
+  const saveProductsList = (updatedList: Product[]) => {
+    setProducts(updatedList);
+    localStorage.setItem("fan_chiquitano_products", JSON.stringify(updatedList));
+  };
+
+  // Status calculation for a product at simulatedMonth
+  const getProductStatus = (product: Product, month: number): ProductStatus => {
+    const isCurrentIn = product.seasonMonths.includes(month);
+    const nextMonth = month === 12 ? 1 : month + 1;
+    const isNextIn = product.seasonMonths.includes(nextMonth);
+
+    if (isCurrentIn) {
+      return !isNextIn ? "Termina Pronto" : "En Temporada";
+    } else {
+      return isNextIn ? "Comienza Pronto" : "Fuera de Temporada";
+    }
+  };
+
+  // Filtered Products List
+  const filteredProducts = products.filter((prod) => {
+    // Search terms
+    const matchesSearch =
+      prod.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      prod.scientificName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      prod.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      prod.gastronomicUses.some((use) => use.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    // Category
+    const matchesCategory = selectedCategory === "Todos" || prod.category === selectedCategory;
+
+    // Status
+    const status = getProductStatus(prod, simulatedMonth);
+    const matchesStatus = selectedStatusFilter === "Todos" || status === selectedStatusFilter;
+
+    return matchesSearch && matchesCategory && matchesStatus;
+  });
+
+  // Calculate high-priority notifications for the current simulated month
+  const currentAlerts: SystemAlert[] = products
+    .map((prod) => {
+      const status = getProductStatus(prod, simulatedMonth);
+      let msg = "";
+      let type: "start" | "end" | "soon" = "soon";
+
+      if (status === "En Temporada" && prod.seasonMonths.indexOf(simulatedMonth) === 0) {
+        msg = `¡La temporada de ${prod.name} acaba de iniciar oficialmente! Ya puedes contactar a las asociaciones de recolectores locales para la provisión fresca del mes.`;
+        type = "start";
+      } else if (status === "Termina Pronto") {
+        msg = `⚠️ Último mes de disponibilidad de ${prod.name}. Ideal para deshidratados, congelados, pulpas y conservas para restaurantes antes de la veda silvestre.`;
+        type = "end";
+      } else if (status === "Comienza Pronto") {
+        msg = `🌿 Se acerca la temporada de ${prod.name}. Programa tus reservas gastronómicas y planifica lanzamientos de menú con el próximo fruto del bosque.`;
+        type = "soon";
+      }
+
+      if (msg) {
+        return {
+          id: `${prod.id}-${simulatedMonth}`,
+          productId: prod.id,
+          productName: prod.name,
+          type,
+          message: msg,
+          date: `Validez: ${MONTH_NAMES[simulatedMonth - 1]}`
+        };
+      }
+      return null;
+    })
+    .filter(Boolean) as SystemAlert[];
+
+  // Set first product as default selected if none in list
+  useEffect(() => {
+    if (filteredProducts.length > 0 && !selectedProduct) {
+      setSelectedProduct(filteredProducts[0]);
+    }
+  }, [filteredProducts, selectedProduct]);
+
+  // Handle subscriber submit
+  const handleSubscribe = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!subscriberEmail && !subscriberPhone) return;
+    if (!subTerms) return; // must accept terms
+
+    const newSub: Subscriber = {
+      name: subscriberName || authUser?.name || "",
+      email: subscriberEmail,
+      phone: subscriberPhone,
+      channels: subChannels,
+      interestedCategories: [selectedCategory !== "Todos" ? selectedCategory : "General"],
+      interestedProductId: selectedProduct?.id,
+      acceptedTerms: true,
+      createdAt: new Date().toISOString()
+    };
+
+    const existing = localStorage.getItem("fan_subscribers");
+    let arr: Subscriber[] = [];
+    if (existing) {
+      try { arr = JSON.parse(existing); } catch (err) { }
+    }
+    arr.push(newSub);
+    localStorage.setItem("fan_subscribers", JSON.stringify(arr));
+
+    setLastSub(newSub);
+    setSubStatus("success");
+  };
+
+  // Build a dedicated harvest-alert message for a product
+  const buildAlertMessage = (sub: Subscriber | null) => {
+    const prod = selectedProduct;
+    const who = sub?.name || authUser?.name || "un interesado";
+    const months = prod ? prod.seasonMonths.map(m => MONTH_NAMES[m - 1]).join(", ") : "la temporada";
+    const prodName = prod ? prod.name : "los productos del bosque chiquitano";
+    return (
+      `Hola, soy ${who}. Acepto recibir avisos sobre las fechas de ALTA COSECHA de ${prodName} ` +
+      `(meses: ${months}). Por favor contáctenme cuando inicie la temporada. ` +
+      `Mi correo: ${sub?.email || "(sin correo)"} | WhatsApp: ${sub?.phone || "(sin número)"}.`
+    );
+  };
+
+  // Recipient: the gatherer/association contact of the selected product ("a quién pasarle la info")
+  const getAlertRecipient = (): Contact | null => {
+    if (selectedProduct && selectedProduct.contacts.length > 0) return selectedProduct.contacts[0];
+    return null;
+  };
+
+  const buildWhatsappLink = (sub: Subscriber | null) => {
+    const recipient = getAlertRecipient();
+    const phone = (recipient?.phone || "").replace(/[^0-9]/g, "");
+    const text = encodeURIComponent(buildAlertMessage(sub));
+    return phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`;
+  };
+
+  const buildMailtoLink = (sub: Subscriber | null) => {
+    const subject = encodeURIComponent(`Alerta de alta cosecha — ${selectedProduct?.name || "Bosque Chiquitano"}`);
+    const body = encodeURIComponent(buildAlertMessage(sub));
+    return `mailto:?subject=${subject}&body=${body}`;
+  };
+
+  const resetSubscribeForm = () => {
+    setSubStatus("idle");
+    setSubscriberName("");
+    setSubscriberEmail("");
+    setSubscriberPhone("");
+    setSubTerms(false);
+    setLastSub(null);
+  };
+
+  // Load persisted auth user on mount
+  useEffect(() => {
+    const u = localStorage.getItem("fan_auth_user");
+    if (u) {
+      try {
+        const parsed = JSON.parse(u);
+        setAuthUser(parsed);
+        if (parsed?.name) setSubscriberName(parsed.name);
+        if (parsed?.email) setSubscriberEmail(parsed.email);
+      } catch (err) { }
+    }
+  }, []);
+
+  // Simulated auth handlers (localStorage-based)
+  // Hardcoded administrator credentials (only this profile sees the Backoffice)
+  const ADMIN_EMAIL = "andrewtab1505@gmail.com";
+  const ADMIN_PASSWORD = "Pollo123";
+
+  const handleAuthSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+    const usersRaw = localStorage.getItem("fan_users");
+    let users: { name: string; email: string; password: string }[] = [];
+    if (usersRaw) { try { users = JSON.parse(usersRaw); } catch (err) { } }
+
+    if (authMode === "register") {
+      if (!authName || !authEmail || !authPassword) { setAuthError("Completa todos los campos."); return; }
+      if (users.some(u => u.email.toLowerCase() === authEmail.toLowerCase())) {
+        setAuthError("Ya existe una cuenta con ese correo. Inicia sesión."); return;
+      }
+      users.push({ name: authName, email: authEmail, password: authPassword });
+      localStorage.setItem("fan_users", JSON.stringify(users));
+      finishAuth(authName, authEmail, false);
+    } else {
+      // 1) Check the hardcoded administrator credentials first
+      if (authEmail.trim().toLowerCase() === ADMIN_EMAIL && authPassword === ADMIN_PASSWORD) {
+        finishAuth("Administrador FAN", ADMIN_EMAIL, true);
+        return;
+      }
+      // 2) Otherwise validate against regular registered users
+      const found = users.find(u => u.email.toLowerCase() === authEmail.toLowerCase() && u.password === authPassword);
+      if (!found) { setAuthError("Correo o contraseña incorrectos."); return; }
+      finishAuth(found.name, found.email, false);
+    }
+  };
+
+  const finishAuth = (name: string, email: string, isAdmin: boolean = false) => {
+    const u = { name, email, isAdmin };
+    setAuthUser(u);
+    localStorage.setItem("fan_auth_user", JSON.stringify(u));
+    setSubscriberName(name);
+    setSubscriberEmail(email);
+    setShowAuthModal(false);
+    setAuthName(""); setAuthEmail(""); setAuthPassword(""); setAuthError("");
+    if (!isAdmin) {
+      // Regular users must never land on the admin view
+      setActiveTab(prev => (prev === "admin" ? "home" : prev));
+      setIsAdminMode(false);
+    }
+  };
+
+  const handleLogout = () => {
+    setAuthUser(null);
+    localStorage.removeItem("fan_auth_user");
+    setIsAdminMode(false);
+    setActiveTab(prev => (prev === "admin" ? "home" : prev));
+  };
+
+  // Open Form for Adding Product
+  const handleOpenAddForm = () => {
+    setEditingProduct(null);
+    setFormName("");
+    setFormScientificName("");
+    setFormDescription("");
+    setFormCategory("Semilla/Nuez");
+    setFormCharacteristics("");
+    setFormSeasonMonths([8, 9, 10]); // Default Almendra
+    setFormUses("");
+    setFormTown("Concepción");
+    setFormLat(40);
+    setFormLng(50);
+    setFormContacts([]);
+    setFormRecipes([]);
+    setShowAdminForm(true);
+  };
+
+  // Open Form for Editing Product
+  const handleOpenEditForm = (prod: Product) => {
+    setEditingProduct(prod);
+    setFormName(prod.name);
+    setFormScientificName(prod.scientificName);
+    setFormDescription(prod.description);
+    setFormCategory(prod.category);
+    setFormCharacteristics(prod.characteristics.join("\n"));
+    setFormSeasonMonths(prod.seasonMonths);
+    setFormUses(prod.gastronomicUses.join("\n"));
+    setFormTown(prod.origin.town);
+    setFormLat(prod.origin.lat);
+    setFormLng(prod.origin.lng);
+    setFormContacts(prod.contacts);
+    setFormRecipes(prod.recipes);
+    setShowAdminForm(true);
+  };
+
+  // Add Contact Helper
+  const handleAddContact = () => {
+    if (!newContactName || !newContactPhone) return;
+    const newContact: Contact = {
+      id: "cont-" + Date.now(),
+      name: newContactName,
+      role: newContactRole,
+      type: newContactType,
+      phone: newContactPhone,
+      location: newContactLocation || formTown
+    };
+    setFormContacts([...formContacts, newContact]);
+    setNewContactName("");
+    setNewContactRole("");
+    setNewContactPhone("");
+    setNewContactLocation("");
+  };
+
+  // Remove Contact Helper
+  const handleRemoveContact = (id: string) => {
+    setFormContacts(formContacts.filter(c => c.id !== id));
+  };
+
+  // Add Recipe Helper
+  const handleAddRecipe = () => {
+    if (!newRecipeTitle || !newRecipeIngredients || !newRecipeInstructions) return;
+    const newRec: Recipe = {
+      id: "rec-" + Date.now(),
+      title: newRecipeTitle,
+      description: newRecipeDesc,
+      ingredients: newRecipeIngredients.split("\n").filter(Boolean),
+      instructions: newRecipeInstructions.split("\n").filter(Boolean),
+      servings: newRecipeServings,
+      difficulty: newRecipeDifficulty
+    };
+    setFormRecipes([...formRecipes, newRec]);
+    setNewRecipeTitle("");
+    setNewRecipeDesc("");
+    setNewRecipeIngredients("");
+    setNewRecipeInstructions("");
+  };
+
+  // Remove Recipe Helper
+  const handleRemoveRecipe = (id: string) => {
+    setFormRecipes(formRecipes.filter(r => r.id !== id));
+  };
+
+  // Toggle Season Month select
+  const handleToggleMonth = (mNum: number) => {
+    if (formSeasonMonths.includes(mNum)) {
+      setFormSeasonMonths(formSeasonMonths.filter(m => m !== mNum));
+    } else {
+      setFormSeasonMonths([...formSeasonMonths, mNum].sort((a, b) => a - b));
+    }
+  };
+
+  // Submit Product Form
+  const handleSubmitProduct = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formName || !formScientificName || !formDescription) {
+      alert("Por favor rellene el nombre, nombre científico y descripción.");
+      return;
+    }
+
+    const characteristicsArr = formCharacteristics.split("\n").map(s => s.trim()).filter(Boolean);
+    const usesArr = formUses.split("\n").map(s => s.trim()).filter(Boolean);
+
+    const productPayload: Product = {
+      id: editingProduct ? editingProduct.id : formName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, ""),
+      name: formName,
+      scientificName: formScientificName,
+      description: formDescription,
+      characteristics: characteristicsArr.length > 0 ? characteristicsArr : ["Fruto originario recolectado de manera silvestre."],
+      category: formCategory,
+      seasonMonths: formSeasonMonths.length > 0 ? formSeasonMonths : [simulatedMonth],
+      imageUrl: editingProduct ? editingProduct.imageUrl : `${formName.toLowerCase().split(" ")[0]}_illustration`,
+      origin: {
+        town: formTown,
+        department: "Santa Cruz",
+        lat: formLat,
+        lng: formLng
+      },
+      contacts: formContacts,
+      gastronomicUses: usesArr.length > 0 ? usesArr : ["Usos culinarios múltiples."],
+      recipes: formRecipes
+    };
+
+    let nextProductsList = [...products];
+    if (editingProduct) {
+      nextProductsList = nextProductsList.map(p => p.id === editingProduct.id ? productPayload : p);
+    } else {
+      nextProductsList.push(productPayload);
+    }
+
+    saveProductsList(nextProductsList);
+    setSelectedProduct(productPayload);
+    setShowAdminForm(false);
+    setEditingProduct(null);
+  };
+
+  // Delete Product
+  const handleDeleteProduct = (id: string) => {
+    if (window.confirm("¿Está seguro de eliminar este producto del bosque? Esta acción no se puede deshacer.")) {
+      const nextList = products.filter(p => p.id !== id);
+      saveProductsList(nextList);
+      if (selectedProduct?.id === id) {
+        setSelectedProduct(nextList[0] || null);
+      }
+    }
+  };
+
+  // Custom status color resolver
+  const getStatusBadge = (status: ProductStatus) => {
+    switch (status) {
+      case "En Temporada":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            En Temporada Plena
+          </span>
+        );
+      case "Comienza Pronto":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full bg-blue-950 text-blue-300 border border-blue-900">
+            <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+            Comienza Pronto
+          </span>
+        );
+      case "Termina Pronto":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full bg-amber-950 text-amber-300 border border-amber-800">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+            ⚠️ Termina Pronto
+          </span>
+        );
+      case "Fuera de Temporada":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full bg-slate-900 text-slate-400 border border-slate-800">
+            <span className="w-2 h-2 rounded-full bg-slate-600"></span>
+            Fuera de Temporada
+          </span>
+        );
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F5F3ED] text-stone-850 flex flex-col font-sans selection:bg-[#c5a059]/30 selection:text-[#070b09] antialiased relative overflow-x-hidden">
+
+      {/* Ambient background decoration circles for premium organic look */}
+      <div className="absolute top-10 left-10 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none z-0"></div>
+      <div className="absolute bottom-20 right-20 w-96 h-96 bg-[#c5a059]/5 rounded-full blur-3xl pointer-events-none z-0"></div>
+
+      {/* Institutional Banner */}
+      <div className="bg-[#0e261b] border-b border-emerald-950 text-emerald-100/90 py-3 px-4 text-xs transition-colors">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
+          <div className="flex items-center gap-2.5 overflow-hidden min-w-0">
+            <span className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#1b4d36] text-[#61e4ad] font-semibold text-[10px] tracking-wide shrink-0 border border-emerald-800/40">
+              <Bell className="w-3 h-3 text-[#61e4ad]" /> Alertas Bioclimáticas
+            </span>
+            <div className="text-[11px] font-medium text-stone-200 tracking-wide truncate min-w-0">
+              {currentAlerts.length > 0 ? (
+                <span>
+                  {currentAlerts[0].message} •
+                  <span className="text-[#c5a059] ml-2 underline cursor-pointer hover:text-[#d9b773] font-semibold" onClick={() => {
+                    const found = products.find(p => p.id === currentAlerts[0].productId);
+                    if (found) {
+                      setSelectedProduct(found);
+                      setActiveTab("catalog");
+                    }
+                  }}>Ver Ficha Técnica</span>
+                </span>
+              ) : (
+                "🌿 Conservando la Biodiversidad del Bosque Seco Chiquitano mediante el aprovechamiento forestal no-maderable sostenible."
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-3 md:shrink-0 min-w-0">
+            <span className="text-[10px] text-stone-400 font-medium shrink-0">Cronograma Mensual:</span>
+            <div className="flex items-center gap-1 bg-[#091b13] p-0.5 rounded-lg border border-emerald-900/30 overflow-x-auto no-scrollbar">
+              {MONTH_NAMES.map((name, idx) => (
+                <button
+                  key={name}
+                  id={`m-ticker-${idx}`}
+                  onClick={() => setSimulatedMonth(idx + 1)}
+                  className={`px-2 py-0.5 rounded text-[9.5px] font-semibold tracking-tight transition-all cursor-pointer shrink-0 ${simulatedMonth === idx + 1
+                    ? "bg-[#c5a059] text-[#070b09]"
+                    : "text-stone-400 hover:text-stone-100 hover:bg-[#123626]"
+                    }`}
+                >
+                  {name.substring(0, 3)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Header */}
+      <header className="bg-[#fbfcfb]/95 backdrop-blur-md border-b-2 border-[#0f4c3a] sticky top-0 z-40 transition-all shadow-xs">
+        <div className="max-w-7xl mx-auto px-4 py-3 sm:px-6 lg:px-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3.5 animate-fadeIn shrink-0">
+            <Logo className="h-10 sm:h-14 transition-transform hover:scale-[1.02] duration-300 cursor-pointer" />
+          </div>
+
+          {/* Main Mode Navigation tabs - Redesigned with organic greens */}
+          <nav className="flex items-center gap-1 bg-[#eef5f1] p-1 rounded-xl border border-[#d6e5dc] shadow-inner overflow-x-auto no-scrollbar -mx-1 sm:mx-0">
+            <button
+              id="tab-home-btn"
+              onClick={() => setActiveTab("home")}
+              className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer shrink-0 whitespace-nowrap ${activeTab === "home"
+                ? "bg-[#0f4c3a] text-white shadow-md font-bold"
+                : "text-[#0f4c3a]/80 hover:text-[#0f4c3a] hover:bg-[#e4eedf]/40"
+                }`}
+            >
+              <Home className={`w-3.5 h-3.5 ${activeTab === "home" ? "text-white animate-pulse" : "text-[#0f4c3a]"}`} />
+              <span>Inicio</span>
+            </button>
+            <button
+              id="tab-catalog-btn"
+              onClick={() => setActiveTab("catalog")}
+              className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer shrink-0 whitespace-nowrap ${activeTab === "catalog"
+                ? "bg-[#0f4c3a] text-white shadow-md font-bold"
+                : "text-[#0f4c3a]/80 hover:text-[#0f4c3a] hover:bg-[#e4eedf]/40"
+                }`}
+            >
+              <Calendar className={`w-3.5 h-3.5 ${activeTab === "catalog" ? "text-white" : "text-[#0f4c3a]"}`} />
+              <span>Bio-Calendario</span>
+            </button>
+            <button
+              id="tab-map-btn"
+              onClick={() => setActiveTab("map")}
+              className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer shrink-0 whitespace-nowrap ${activeTab === "map"
+                ? "bg-[#0f4c3a] text-white shadow-md font-bold"
+                : "text-[#0f4c3a]/80 hover:text-[#0f4c3a] hover:bg-[#e4eedf]/40"
+                }`}
+            >
+              <Globe className={`w-3.5 h-3.5 ${activeTab === "map" ? "text-white" : "text-[#0f4c3a]"}`} />
+              <span>Geografía de Origen</span>
+            </button>
+            <button
+              id="tab-chef-btn"
+              onClick={() => setActiveTab("chef")}
+              className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer shrink-0 whitespace-nowrap ${activeTab === "chef"
+                ? "bg-[#0f4c3a] text-white shadow-md font-bold"
+                : "text-[#0f4c3a]/80 hover:text-[#0f4c3a] hover:bg-[#e4eedf]/40"
+                }`}
+            >
+              <Sparkles className={`w-3.5 h-3.5 ${activeTab === "chef" ? "text-white" : "text-[#0f4c3a]"}`} />
+              <span>Gastronomía AI</span>
+            </button>
+            <button
+              id="tab-admin-btn"
+              onClick={() => {
+                setActiveTab("admin");
+                setIsAdminMode(true);
+              }}
+              className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer shrink-0 whitespace-nowrap ${activeTab === "admin"
+                ? "bg-[#0f4c3a] text-white shadow-md font-bold"
+                : "text-[#0f4c3a]/80 hover:text-[#0f4c3a] hover:bg-[#e4eedf]/40"
+                }`}
+            >
+              <Lock className={`w-3.5 h-3.5 ${activeTab === "admin" ? "text-white" : "text-[#0f4c3a]"}`} />
+              <span>Backoffice</span>
+            </button>
+          </nav>
+
+          {/* Auth control */}
+          <div className="flex items-center gap-2 shrink-0">
+            {authUser ? (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#eef5f1] border border-[#d6e5dc] text-[#0f4c3a]">
+                  <User className="w-3.5 h-3.5" />
+                  <span className="text-xs font-bold max-w-[120px] truncate">{authUser.name}</span>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold text-stone-500 hover:text-[#0f4c3a] hover:bg-[#eef5f1] border border-transparent hover:border-[#d6e5dc] cursor-pointer transition-all"
+                  title="Cerrar sesión"
+                >
+                  Salir
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setAuthMode("login"); setAuthError(""); setShowAuthModal(true); }}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#0f4c3a] text-white hover:bg-[#0c3e2f] shadow-sm cursor-pointer transition-all"
+              >
+                <User className="w-3.5 h-3.5" /> Iniciar sesión
+              </button>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Full-width Home Carousel Section (Spans edge-to-edge) */}
+      {activeTab === "home" && (() => {
+        const currentSlideProduct = products[homeSlideIndex] || products[0];
+        if (!currentSlideProduct) return null;
+        const currentStatus = getProductStatus(currentSlideProduct, simulatedMonth);
+
+        return (
+          <div className="relative bg-[#0e261b] w-full overflow-hidden border-b border-emerald-950 text-emerald-100 animate-fadeIn z-10">
+
+            {/* Background ambient lighting/gradient */}
+            <div className="absolute inset-0 bg-gradient-to-br from-[#0c2016] via-[#102d20] to-[#204a37] opacity-95 z-0"></div>
+            <div className="absolute -top-40 -left-40 w-96 h-96 bg-[#c5a059]/10 rounded-full blur-3xl z-0"></div>
+            <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl z-0"></div>
+
+            {/* Centered aligned layout container */}
+            <div className="max-w-7xl w-full mx-auto px-4 py-8 sm:px-6 lg:px-8 flex flex-col lg:flex-row items-center gap-8 relative z-10 min-h-[480px]">
+
+              {/* Left Side Content of Slide */}
+              <div className="flex-1 space-y-4 md:space-y-6 text-left">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-800/40 text-emerald-300 font-semibold text-[10px] uppercase tracking-wider border border-emerald-800/20">
+                  <Sparkles className="w-3.5 h-3.5 text-[#c5a059] fill-[#c5a059]/20" /> Producto Destacado del Mes
+                </div>
+
+                <div className="space-y-2">
+                  <h2 className="text-3xl md:text-5xl font-black text-white leading-tight font-sans tracking-tight">
+                    {currentSlideProduct.name.toUpperCase()}
+                  </h2>
+                  <p className="text-sm md:text-base italic text-[#c5a059] font-serif font-semibold tracking-wide">
+                    {currentSlideProduct.scientificName}
+                  </p>
+                </div>
+
+                <p className="text-xs md:text-sm text-stone-300 font-serif leading-relaxed line-clamp-4 md:line-clamp-none">
+                  {currentSlideProduct.description}
+                </p>
+
+                <div className="flex flex-wrap items-center gap-3.5 pt-2">
+                  <button
+                    onClick={() => {
+                      setSelectedProduct(currentSlideProduct);
+                      setActiveTab("catalog");
+                    }}
+                    className="bg-[#c5a059] hover:bg-[#d9b773] text-[#070b09] font-extrabold px-6 py-3 rounded-xl text-xs flex items-center gap-2 cursor-pointer shadow-md transition-all hover:scale-[1.03] duration-300"
+                  >
+                    Ver más detalles <ArrowRight className="w-4 h-4 text-[#070b09]" />
+                  </button>
+
+                  <span className={`px-3.5 py-1.5 rounded-xl text-[10.5px] font-bold uppercase tracking-wider border ${currentStatus === "En Temporada" ? "bg-emerald-950/80 text-emerald-300 border-emerald-850" :
+                    currentStatus === "Termina Pronto" ? "bg-amber-950/80 text-amber-300 border-amber-850" :
+                      currentStatus === "Comienza Pronto" ? "bg-blue-950/80 text-blue-300 border-blue-850" :
+                        "bg-stone-900/80 text-stone-400 border-stone-850"
+                    }`}>
+                    {currentStatus === "Termina Pronto" ? "⚠️ Termina Pronto" : currentStatus}
+                  </span>
+                </div>
+              </div>
+
+              {/* Right Side Card: Seasonal Months & Eco Badges */}
+              <div className="w-full lg:w-[350px] shrink-0">
+                <div className="bg-white rounded-3xl p-5 md:p-6 shadow-2xl text-stone-800 border border-stone-150 flex flex-col justify-between h-full space-y-5.5 transform hover:translate-y-[-4px] transition-transform duration-300">
+
+                  {/* Header: Available in */}
+                  <div className="space-y-1">
+                    <h4 className="text-[10px] font-black uppercase text-[#0f4c3a] tracking-widest font-mono">
+                      DISPONIBLE EN:
+                    </h4>
+                    <div className="grid grid-cols-4 gap-1.5 pt-2">
+                      {MONTH_NAMES.map((mName, mIdx) => {
+                        const mNum = mIdx + 1;
+                        const isAvailable = currentSlideProduct.seasonMonths.includes(mNum);
+                        return (
+                          <div
+                            key={mName}
+                            className={`p-1.5 rounded-lg text-[9px] font-black text-center transition-all ${isAvailable
+                              ? "bg-[#0f4c3a] text-white shadow-xs font-bold"
+                              : "bg-stone-100 text-stone-400 border border-stone-200/50"
+                              }`}
+                          >
+                            {mName.substring(0, 3)}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Months summary badge list */}
+                  <div className="space-y-1 border-t border-stone-100 pt-3.5">
+                    <h5 className="text-[9.5px] font-extrabold text-stone-500 uppercase font-sans">
+                      Se encuentra en los meses:
+                    </h5>
+                    <div className="flex flex-wrap gap-1.5 pt-1.5">
+                      {currentSlideProduct.seasonMonths.map(mNum => (
+                        <span key={mNum} className="bg-emerald-50 text-[#0f4c3a] text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border border-emerald-100/60 uppercase">
+                          {MONTH_NAMES[mNum - 1]}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Fila de beneficios del producto */}
+                  <div className="border-t border-stone-100 pt-3.5 flex justify-between items-center text-center gap-1">
+                    <div className="flex flex-col items-center flex-1">
+                      <div className="bg-emerald-50 text-[#0f4c3a] p-1.5 rounded-full mb-1">
+                        <Check className="w-3.5 h-3.5 text-[#0f4c3a] stroke-[3]" />
+                      </div>
+                      <span className="text-[9px] font-black text-stone-750 font-sans tracking-tight">100% natural</span>
+                    </div>
+                    <div className="flex flex-col items-center flex-1 border-x border-stone-100">
+                      <div className="bg-emerald-50 text-[#0f4c3a] p-1.5 rounded-full mb-1">
+                        <Heart className="w-3.5 h-3.5 text-rose-600 fill-current" />
+                      </div>
+                      <span className="text-[9px] font-black text-stone-750 font-sans tracking-tight">Apoya lo local</span>
+                    </div>
+                    <div className="flex flex-col items-center flex-1">
+                      <div className="bg-emerald-50 text-[#0f4c3a] p-1.5 rounded-full mb-1">
+                        <Globe className="w-3.5 h-3.5 text-emerald-600 stroke-[2.5]" />
+                      </div>
+                      <span className="text-[9px] font-black text-stone-750 font-sans tracking-tight">Sostenible</span>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+            </div>
+
+            {/* Left/Right Carousel slide trigger arrows */}
+            <button
+              onClick={() => setHomeSlideIndex(idx => idx === 0 ? products.length - 1 : idx - 1)}
+              className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/35 hover:bg-black/55 text-white w-9 h-9 rounded-full flex items-center justify-center cursor-pointer transition-colors z-20 animate-fadeIn"
+              title="Anterior"
+            >
+              ◀
+            </button>
+            <button
+              onClick={() => setHomeSlideIndex(idx => idx === products.length - 1 ? 0 : idx + 1)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/35 hover:bg-black/55 text-white w-9 h-9 rounded-full flex items-center justify-center cursor-pointer transition-colors z-20 animate-fadeIn"
+              title="Siguiente"
+            >
+              ▶
+            </button>
+
+            {/* Bottom carousel indicator dots */}
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20">
+              {products.map((_, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setHomeSlideIndex(idx)}
+                  className={`w-2 h-2 rounded-full transition-all cursor-pointer ${homeSlideIndex === idx ? "bg-[#c5a059] w-4" : "bg-white/40"
+                    }`}
+                ></button>
+              ))}
+            </div>
+
+          </div>
+        );
+      })()}
+
+      {/* Main Content Body */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+
+        {/* Dynamic Simulation Controls - Styled Elegantly */}
+        <div className="bg-white rounded-2xl p-4.5 mb-6 border border-stone-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-[#c5a059]/10 p-2.5 rounded-xl border border-[#c5a059]/20 text-[#a07c39] shrink-0">
+              <Calendar className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-[11px] text-stone-500 uppercase tracking-widest font-mono font-bold">Temporada de Observación Silvestre:</p>
+              <h3 className="text-lg font-black text-[#0e261b] font-sans">
+                {MONTH_NAMES[simulatedMonth - 1]} del 2026
+              </h3>
+            </div>
+          </div>
+
+          {/* Month Slider and Controller */}
+          <div className="flex flex-wrap items-center gap-4 bg-stone-50 p-2 rounded-xl border border-stone-200">
+            <span className="text-[10px] text-stone-500 uppercase tracking-wider font-bold px-2">Avanzar Estación:</span>
+            <input
+              type="range"
+              min="1"
+              max="12"
+              value={simulatedMonth}
+              onChange={(e) => setSimulatedMonth(parseInt(e.target.value))}
+              className="w-36 h-1.5 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-[#a07c39]"
+            />
+            <div className="flex items-center gap-1.5 px-1">
+              <button
+                id="btn-prev-month"
+                onClick={() => setSimulatedMonth(m => m === 1 ? 12 : m - 1)}
+                className="p-1 px-2.5 text-xs rounded-lg bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 shadow-xs transition-all cursor-pointer font-bold"
+                title="Mes anterior"
+              >
+                ◀
+              </button>
+              <button
+                id="btn-next-month"
+                onClick={() => setSimulatedMonth(m => m === 12 ? 1 : m + 1)}
+                className="p-1 px-2.5 text-xs rounded-lg bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 shadow-xs transition-all cursor-pointer font-bold"
+                title="Siguiente mes"
+              >
+                ▶
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Outer Tab Conditional Views */}
+
+        {/* Outer Tab Conditional Views */}
+
+        {/* Tab 0: Inicio (Home) View */}
+        {activeTab === "home" && (() => {
+          const currentSlideProduct = products[homeSlideIndex] || products[0];
+
+          // Get 4 recipes dynamically from existing products
+          const homeRecipes = products.flatMap(p => p.recipes.map(r => {
+            let tag = "Receta";
+            if (r.difficulty === "Fácil") tag = "Fácil";
+            else if (r.title.toLowerCase().includes("sorbete") || r.title.toLowerCase().includes("dulce") || r.title.toLowerCase().includes("grisines")) tag = "Postre";
+            else if (r.title.toLowerCase().includes("vinagreta") || r.title.toLowerCase().includes("pesto")) tag = "Salsa";
+            else if (r.title.toLowerCase().includes("cuñapé")) tag = "Horneado";
+            else tag = "Plato Principal";
+
+            return {
+              ...r,
+              productName: p.name,
+              productId: p.id,
+              tag
+            };
+          })).slice(0, 4);
+
+          if (!currentSlideProduct) return null;
+
+          const currentStatus = getProductStatus(currentSlideProduct, simulatedMonth);
+
+          return (
+            <div className="space-y-10 animate-fadeIn">
+
+              {/* Recipes Grid Section */}
+              <div className="space-y-6">
+
+                {/* Section Header styled precisely like user image */}
+                <div className="text-center space-y-2">
+                  <div className="flex items-center justify-center gap-2 text-emerald-805">
+                    <span className="text-lg">🌿</span>
+                    <h3 className="text-2xl font-black text-[#0f4c3a] font-sans tracking-tight">Recetas para disfrutar</h3>
+                    <span className="text-lg">🌿</span>
+                  </div>
+                  <p className="text-xs text-stone-500 max-w-xl mx-auto font-serif">
+                    Descubre formas deliciosas y naturales de usar nuestros productos forestales de la Chiquitania.
+                  </p>
+                </div>
+
+                {/* Recipes Cards Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {homeRecipes.map((recipe, index) => {
+                    // Create beautiful custom radial gradients based on the index to act as premium background illustrations
+                    const gradColors = [
+                      "from-emerald-700/80 to-[#0e261b]",
+                      "from-amber-600/80 to-[#3b2a0c]",
+                      "from-teal-600/80 to-[#08221c]",
+                      "from-orange-600/80 to-[#381c08]"
+                    ];
+                    const selectedGrad = gradColors[index % gradColors.length];
+                    const productImage = recipe.image || products.find(p => p.id === recipe.productId)?.imageUrl || "";
+
+                    return (
+                      <div
+                        key={recipe.id}
+                        className="bg-white border border-stone-200/80 rounded-2xl overflow-hidden shadow-xs hover:shadow-md transition-all duration-350 flex flex-col justify-between hover:translate-y-[-2px]"
+                      >
+                        {/* Recipe Card Visual Banner: product photo + gradient overlay */}
+                        <div className={`h-36 bg-gradient-to-br ${selectedGrad} flex flex-col justify-between p-3.5 text-white relative overflow-hidden`}>
+                          {/* Product image (matches the product name); falls back to gradient + chef hat */}
+                          {productImage && productImage.startsWith("http") && (
+                            <img
+                              src={productImage}
+                              alt={recipe.productName}
+                              loading="lazy"
+                              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                              className="absolute inset-0 w-full h-full object-cover"
+                            />
+                          )}
+                          {/* Readability overlay */}
+                          <div className={`absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-black/30`}></div>
+
+                          <span className="relative z-10 self-start bg-white/20 backdrop-blur-md text-white text-[9.5px] font-black px-2.5 py-0.5 rounded-full border border-white/10 uppercase tracking-widest">
+                            {recipe.tag}
+                          </span>
+
+                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-15">
+                            <ChefHat className="w-16 h-16 text-white stroke-[1.2]" />
+                          </div>
+
+                          <div className="relative z-10 space-y-0.5">
+                            <span className="text-[9.5px] font-bold text-amber-300 uppercase tracking-wide">
+                              Sugerencia con:
+                            </span>
+                            <p className="text-[11.5px] font-extrabold truncate text-white leading-tight">
+                              {recipe.productName}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Text Body */}
+                        <div className="p-4 flex-1 flex flex-col justify-between space-y-3 bg-white">
+                          <div className="space-y-1">
+                            <h4 className="text-xs font-black text-stone-900 leading-snug line-clamp-2">
+                              {recipe.title}
+                            </h4>
+                            <p className="text-[10.5px] text-stone-500 font-serif leading-relaxed line-clamp-3">
+                              {recipe.description}
+                            </p>
+                          </div>
+
+                          <button
+                            onClick={() => setSelectedHomeRecipe(recipe)}
+                            className="text-[10.5px] font-black text-[#0f4c3a] hover:text-[#0c3e2f] flex items-center gap-1 cursor-pointer transition-colors pt-2 border-t border-stone-100 w-full text-left"
+                          >
+                            Ver receta <ArrowRight className="w-3 h-3 text-[#0f4c3a]" />
+                          </button>
+                        </div>
+
+                      </div>
+                    );
+                  })}
+                </div>
+
+              </div>
+
+              {/* Bottom Eco Benefits Row (Identical to user's bottom banner) */}
+              <div className="bg-[#f4f3ed] border border-stone-200 p-5 rounded-2xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch text-left shadow-xs">
+                <div className="flex items-start gap-3">
+                  <div className="bg-[#0f4c3a] text-white p-2.5 rounded-full shrink-0 flex items-center justify-center">
+                    <Check className="w-4 h-4 text-white stroke-[3.5]" />
+                  </div>
+                  <div>
+                    <h5 className="text-xs font-black text-stone-900">Productos naturales</h5>
+                    <p className="text-[10.5px] text-stone-500 mt-0.5 font-serif">100% orgánicos, libres de agroquímicos, pesticidas o conservantes artificiales.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 sm:border-l lg:border-l border-stone-250 sm:pl-4">
+                  <div className="bg-[#0f4c3a] text-white p-2.5 rounded-full shrink-0 flex items-center justify-center">
+                    <User className="w-4 h-4 text-white stroke-[2.5]" />
+                  </div>
+                  <div>
+                    <h5 className="text-xs font-black text-stone-900">Apoya a las comunidades</h5>
+                    <p className="text-[10.5px] text-stone-500 mt-0.5 font-serif">Comercio directo ético con comunidades originarias de la Chiquitania.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 lg:border-l border-stone-250 lg:pl-4">
+                  <div className="bg-[#0f4c3a] text-white p-2.5 rounded-full shrink-0 flex items-center justify-center">
+                    <Globe className="w-4 h-4 text-white stroke-[2.5]" />
+                  </div>
+                  <div>
+                    <h5 className="text-xs font-black text-stone-900">Conservamos nuestros bosques</h5>
+                    <p className="text-[10.5px] text-stone-500 mt-0.5 font-serif">La cosecha forestal no-maderable previene deforestaciones e incendios.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 sm:border-l lg:border-l border-stone-250 sm:pl-4 lg:pl-4">
+                  <div className="bg-[#0f4c3a] text-white p-2.5 rounded-full shrink-0 flex items-center justify-center">
+                    <Heart className="w-4 h-4 text-white stroke-[2.5]" />
+                  </div>
+                  <div>
+                    <h5 className="text-xs font-black text-stone-900">Lleva lo mejor</h5>
+                    <p className="text-[10.5px] text-stone-500 mt-0.5 font-serif">Aporta nutrientes puros, aromas milenarios y salud directo a tu mesa de autor.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Recipe Detail Modal Overlays (Aesthetic Cookbook Style) */}
+              {selectedHomeRecipe && (
+                <div className="fixed inset-0 bg-[#070b09]/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
+                  <div className="bg-white rounded-3xl overflow-hidden shadow-2xl max-w-2xl w-full border border-stone-200 max-h-[90vh] flex flex-col justify-between animate-slideUp">
+
+                    {/* Modal Header */}
+                    <div className="bg-[#0e261b] text-emerald-100 p-5 relative">
+                      <span className="bg-white/20 text-white text-[9px] font-black px-2.5 py-0.5 rounded-full border border-white/10 uppercase tracking-widest">
+                        {selectedHomeRecipe.tag}
+                      </span>
+                      <h3 className="text-lg font-black text-white mt-2 font-sans tracking-tight">
+                        {selectedHomeRecipe.title}
+                      </h3>
+                      <p className="text-xs text-emerald-300 font-serif italic mt-0.5">
+                        Sabor autóctono basado en: {selectedHomeRecipe.productName}
+                      </p>
+
+                      <button
+                        onClick={() => setSelectedHomeRecipe(null)}
+                        className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white p-1.5 rounded-full transition-colors cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Modal Content Scrollable */}
+                    <div className="p-6 overflow-y-auto space-y-6 custom-scrollbar text-stone-850">
+
+                      {/* Meta stats bar */}
+                      <div className="flex gap-4 text-xs font-bold text-[#a07c39]">
+                        <span className="bg-stone-50 border border-stone-200/50 px-3 py-1 rounded-xl">
+                          🍽️ Porciones: {selectedHomeRecipe.servings}
+                        </span>
+                        <span className="bg-stone-50 border border-stone-200/50 px-3 py-1 rounded-xl">
+                          🔥 Dificultad: {selectedHomeRecipe.difficulty}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-stone-650 leading-relaxed font-serif bg-stone-50 p-3.5 rounded-2xl border border-stone-150">
+                        {selectedHomeRecipe.description}
+                      </p>
+
+                      <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+                        {/* Ingredients */}
+                        <div className="md:col-span-2 space-y-2">
+                          <h4 className="text-[10px] font-black uppercase text-[#0f4c3a] tracking-widest font-mono">
+                            Ingredientes:
+                          </h4>
+                          <ul className="space-y-1.5">
+                            {selectedHomeRecipe.ingredients.map((ing: string, i: number) => (
+                              <li key={i} className="text-xs text-stone-700 flex items-start gap-1.5 font-serif leading-relaxed">
+                                <span className="text-[#a07c39] mt-0.5">•</span>
+                                <span>{ing}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        {/* Preparacion */}
+                        <div className="md:col-span-3 space-y-2">
+                          <h4 className="text-[10px] font-black uppercase text-[#0f4c3a] tracking-widest font-mono">
+                            Instrucciones:
+                          </h4>
+                          <ol className="space-y-3 font-serif">
+                            {selectedHomeRecipe.instructions.map((step: string, idx: number) => (
+                              <li key={idx} className="text-xs text-stone-700 flex items-start gap-3">
+                                <span className="bg-[#0f4c3a] text-white font-bold w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[10px] mt-0.5">
+                                  {idx + 1}
+                                </span>
+                                <span className="leading-relaxed">{step}</span>
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* Modal Footer */}
+                    <div className="bg-stone-50 border-t border-stone-200/60 p-4.5 flex justify-between items-center text-[10.5px]">
+                      <button
+                        onClick={() => {
+                          const found = products.find(p => p.id === selectedHomeRecipe.productId);
+                          if (found) {
+                            setSelectedProduct(found);
+                            setSelectedHomeRecipe(null);
+                            setActiveTab("catalog");
+                          }
+                        }}
+                        className="bg-[#0f4c3a] hover:bg-[#0c3e2f] text-white font-bold px-4.5 py-2.5 rounded-xl cursor-pointer shadow-xs transition-colors"
+                      >
+                        Ver Ficha del Ingrediente
+                      </button>
+                      <button
+                        onClick={() => setSelectedHomeRecipe(null)}
+                        className="text-stone-500 hover:text-stone-850 font-bold cursor-pointer transition-colors"
+                      >
+                        Cerrar Recetario
+                      </button>
+                    </div>
+
+                  </div>
+                </div>
+              )}
+
+            </div>
+          );
+        })()}
+
+        {/* Tab 1: Catalogue e Info de Productos */}
+        {activeTab === "catalog" && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+
+            {/* LEFT SIDEBAR: Catalog list, Search, Filters */}
+            <div className="lg:col-span-4 space-y-4">
+
+              {/* Pacto Biocultural Card (Explicit answer to user's marketplace concern) */}
+              <div className="bg-[#eef6f2] border border-[#c1decb] rounded-2xl p-4.5 shadow-xs space-y-3">
+                <div className="flex items-center gap-2 text-[#0e3825]">
+                  <Info className="w-4 h-4 text-[#10472e]" />
+                  <h4 className="text-[10px] font-black uppercase tracking-widest font-mono text-[#10472e]">Información Oficial FAN</h4>
+                </div>
+                <h5 className="text-xs font-bold text-[#0e261b]">Canal de Coordinación Directa</h5>
+                <p className="text-[11px] text-stone-700 leading-relaxed font-sans">
+                  <strong>Esta plataforma no es un marketplace ni una tienda virtual.</strong> No procesamos transacciones comerciales ni cobramos comisiones de venta.
+                  El Biocalendario permite a chefs y restaurantes identificar la disponibilidad de recursos silvestres y <strong>contactar directamente</strong> a las comunidades originarias recolectoras de la Chiquitania por teléfono o WhatsApp.
+                </p>
+                <div className="pt-2 border-t border-[#c1decb]/50 flex items-center justify-between text-[10px] text-[#10472e] font-bold">
+                  <span>Trato Comunitario Directo</span>
+                  <span>100% Sin Intermediarios</span>
+                </div>
+              </div>
+
+              {/* Filter Card */}
+              <div className="bg-white border border-[#d6e5dc]/80 rounded-2xl p-4.5 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-[#0f4c3a] font-mono">Buscador y Filtros</h4>
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-[#0f4c3a]/70" />
+                </div>
+
+                <div className="relative mb-3">
+                  <Search className="w-3.5 h-3.5 text-[#0f4c3a]/60 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    id="search-input"
+                    placeholder="Buscar almendra, copaibo, chiquitano..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2.5 bg-[#f6faf7] border border-[#d6e5dc] rounded-xl text-xs text-stone-850 placeholder-stone-400 focus:bg-white focus:outline-none focus:border-[#0f4c3a]/50 focus:ring-1 focus:ring-[#0f4c3a]/20 transition-all"
+                  />
+                </div>
+
+                {/* Category Filtering */}
+                <div className="space-y-1.5 mb-3">
+                  <label className="text-[9.5px] text-stone-500 uppercase font-bold tracking-wider block">Categoría Botánica</label>
+                  <select
+                    id="cat-filter-select"
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="w-full p-2.5 bg-[#f6faf7] border border-[#d6e5dc] rounded-xl text-xs text-stone-800 focus:bg-white focus:border-[#0f4c3a]/45 focus:outline-none cursor-pointer transition-all"
+                  >
+                    <option value="Todos">Todas las categorías</option>
+                    {CATEGORIES.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Seasonal status filter */}
+                <div className="space-y-1.5">
+                  <label className="text-[9.5px] text-stone-500 uppercase font-bold tracking-wider block">Estado Estacional</label>
+                  <select
+                    id="status-filter-select"
+                    value={selectedStatusFilter}
+                    onChange={(e) => setSelectedStatusFilter(e.target.value)}
+                    className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-700 focus:bg-white focus:border-[#a07c39]/40 focus:outline-none cursor-pointer"
+                  >
+                    <option value="Todos">Todos los estados de veda/cosecha</option>
+                    <option value="En Temporada">En Temporada Plena</option>
+                    <option value="Comienza Pronto">Comienza Pronto</option>
+                    <option value="Termina Pronto">Termina Pronto</option>
+                    <option value="Fuera de Temporada">Fuera de Época</option>
+                  </select>
+                </div>
+              </div>
+              <div className="space-y-2.5 mt-5 max-h-[520px] overflow-y-auto pr-2 custom-scrollbar">
+                <div className="flex items-center justify-between text-[11px] text-stone-500 pb-1">
+                  <span className="font-bold tracking-wide">Listando {filteredProducts.length} frutos silvestres</span>
+                  {selectedCategory !== "Todos" && (
+                    <button onClick={() => { setSelectedCategory("Todos"); setSearchTerm(""); }} className="text-[#a07c39] underline hover:text-[#8b6b2f] transition-colors font-bold cursor-pointer">Ver Todos</button>
+                  )}
+                </div>
+
+                {filteredProducts.length === 0 ? (
+                  <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-stone-200">
+                    <Info className="w-8 h-8 text-stone-400 mx-auto mb-2" />
+                    <p className="text-xs text-stone-600 font-bold">Ningún producto coincide con la búsqueda.</p>
+                    <p className="text-[10px] text-stone-400 mt-1">Prueba cambiando los filtros o simulando otra temporada del año.</p>
+                  </div>
+                ) : (
+                  filteredProducts.map((prod) => {
+                    const status = getProductStatus(prod, simulatedMonth);
+                    const isSelected = selectedProduct?.id === prod.id;
+
+                    return (
+                      <button
+                        key={prod.id}
+                        id={`prod-card-${prod.id}`}
+                        onClick={() => setSelectedProduct(prod)}
+                        className={`w-full text-left p-4 rounded-2xl border transition-all cursor-pointer block ${isSelected
+                          ? "bg-white border-[#0f4c3a] shadow-md ring-1 ring-[#0f4c3a]/15 shadow-[#0f4c3a]/5"
+                          : "bg-white border-[#d6e5dc]/80 hover:border-[#0f4c3a]/40 hover:bg-[#e4eedf]/10"
+                          }`}
+                      >
+                        <div className="flex justify-between items-start gap-2">
+                          <div>
+                            <h4 className={`text-sm font-extrabold tracking-tight transition-all ${isSelected ? "text-emerald-800" : "text-stone-900"}`}>
+                              {prod.name}
+                            </h4>
+                            <span className="text-[10.5px] text-stone-500 font-serif italic block mt-0.5">{prod.scientificName}</span>
+                          </div>
+
+                          {/* Mini Status bullet */}
+                          <span className={`px-2 py-0.5 rounded text-[8.5px] font-bold shrink-0 uppercase tracking-wider border ${status === "En Temporada" ? "bg-emerald-50 text-emerald-900 border-emerald-100" :
+                            status === "Termina Pronto" ? "bg-amber-50 text-amber-900 border-amber-100" :
+                              status === "Comienza Pronto" ? "bg-sky-50 text-sky-900 border-sky-100" :
+                                "bg-stone-100 text-stone-500 border-stone-200/50"
+                            }`}>
+                            {status === "Termina Pronto" ? "⚠️ Termina" : status}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between items-center mt-3 pt-2.5 border-t border-stone-100 text-[10.5px] text-stone-500">
+                          <span className="flex items-center gap-1.5 font-medium">
+                            <MapPin className="w-3.5 h-3.5 text-emerald-700/80" />
+                            {prod.origin.town}
+                          </span>
+                          <span className="bg-stone-100 px-2.5 py-0.5 rounded text-stone-600 font-semibold text-[9.5px] border border-stone-200/30">
+                            {prod.category}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Native Community Email/WhatsApp Notification subscription Box (Extra feature) */}
+              <div className="bg-white border border-stone-200 rounded-3xl p-4.5 mt-4 relative overflow-hidden shadow-xs">
+                <div className="absolute top-0 right-0 p-5 opacity-10 pointer-events-none">
+                  <Smartphone className="w-24 h-24 text-emerald-700" />
+                </div>
+
+                <h4 className="text-xs font-bold text-[#a07c39] uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                  <Bell className="w-3.5 h-3.5 text-[#a07c39]" /> Suscribir a Alertas de Cosecha
+                </h4>
+                <p className="text-[10.5px] text-stone-650 leading-relaxed mb-4">
+                  Reciba avisos directos en su correo o WhatsApp en el momento exacto en que despegue la temporada biológica de los frutos e insumos de su interés.
+                </p>
+
+                {subStatus === "success" ? (
+                  <div className="space-y-3">
+                    <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl text-center text-xs text-emerald-800">
+                      <CheckCircle2 className="w-5 h-5 mx-auto mb-1 text-emerald-600 stroke-2" />
+                      ¡Preferencias guardadas! {getAlertRecipient()
+                        ? <>Tu aviso de alta cosecha se dirige a <b>{getAlertRecipient()!.name}</b>{getAlertRecipient()!.phone ? <> ({getAlertRecipient()!.phone})</> : null}.</>
+                        : <>Selecciona un producto del listado para dirigir el aviso a su recolector responsable.</>}
+                    </div>
+                    <p className="text-[10px] text-stone-500 leading-relaxed px-1">
+                      Envía ahora tu mensaje dedicado con las fechas de alta cosecha {selectedProduct ? <>de <b>{selectedProduct.name}</b></> : null} por el canal que prefieras:
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <a href={buildWhatsappLink(lastSub)} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1.5 py-2.5 bg-[#25D366] hover:bg-[#1ebe5b] text-white font-bold text-[11px] rounded-xl cursor-pointer transition-all">
+                        <Smartphone className="w-3.5 h-3.5" /> WhatsApp
+                      </a>
+                      <a href={buildMailtoLink(lastSub)} className="flex items-center justify-center gap-1.5 py-2.5 bg-[#0f4c3a] hover:bg-[#0c3e2f] text-white font-bold text-[11px] rounded-xl cursor-pointer transition-all">
+                        <Mail className="w-3.5 h-3.5" /> Correo
+                      </a>
+                    </div>
+                    <button onClick={resetSubscribeForm} className="w-full text-center text-[10.5px] text-stone-500 hover:text-[#0f4c3a] pt-1 cursor-pointer">
+                      Registrar otra alerta
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleSubscribe} className="space-y-2">
+                    <input
+                      type="text"
+                      placeholder="Tu nombre"
+                      value={subscriberName}
+                      onChange={(e) => setSubscriberName(e.target.value)}
+                      className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-800 placeholder-stone-400 outline-none focus:bg-white focus:border-[#a07c39]/50 focus:ring-1 focus:ring-[#a07c39]/20"
+                    />
+                    <input
+                      type="email"
+                      required
+                      placeholder="Correo electrónico institucional"
+                      value={subscriberEmail}
+                      onChange={(e) => setSubscriberEmail(e.target.value)}
+                      className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-800 placeholder-stone-400 outline-none focus:bg-white focus:border-[#a07c39]/50 focus:ring-1 focus:ring-[#a07c39]/20"
+                    />
+                    <input
+                      type="text"
+                      placeholder="WhatsApp (ej. +591 ...)"
+                      value={subscriberPhone}
+                      onChange={(e) => setSubscriberPhone(e.target.value)}
+                      className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-800 placeholder-stone-400 outline-none focus:bg-white focus:border-[#a07c39]/50 focus:ring-1 focus:ring-[#a07c39]/20"
+                    />
+
+                    {/* Channel Checkbox */}
+                    <div className="flex items-center gap-4 py-1 text-[10px] text-stone-500 font-bold px-1 animate-fadeIn">
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={subChannels.includes("email")}
+                          onChange={(e) => {
+                            if (e.target.checked) setSubChannels([...subChannels, "email"]);
+                            else setSubChannels(subChannels.filter(c => c !== "email"));
+                          }}
+                          className="rounded text-emerald-700 focus:ring-emerald-600 accent-emerald-600"
+                        />
+                        <span>Por Email</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={subChannels.includes("whatsapp")}
+                          onChange={(e) => {
+                            if (e.target.checked) setSubChannels([...subChannels, "whatsapp"]);
+                            else setSubChannels(subChannels.filter(c => c !== "whatsapp"));
+                          }}
+                          className="rounded text-emerald-700 focus:ring-emerald-600 accent-emerald-600"
+                        />
+                        <span>Por WhatsApp</span>
+                      </label>
+                    </div>
+
+                    {/* Terms acceptance (required) */}
+                    <label className="flex items-start gap-2 py-1 px-1 text-[10px] text-stone-600 leading-snug cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={subTerms}
+                        onChange={(e) => setSubTerms(e.target.checked)}
+                        className="mt-0.5 rounded accent-emerald-600 shrink-0"
+                      />
+                      <span>Acepto recibir avisos sobre las <b>fechas de alta cosecha</b> y que mis datos de contacto se compartan con el recolector responsable del producto seleccionado.</span>
+                    </label>
+
+                    <button
+                      type="submit"
+                      disabled={!subTerms}
+                      className={`w-full py-2.5 font-bold text-xs rounded-xl transition-all shadow-xs ${subTerms ? "bg-[#0f4c3a] hover:bg-[#0c3e2f] text-white cursor-pointer" : "bg-stone-200 text-stone-400 cursor-not-allowed"}`}
+                    >
+                      Guardar y generar aviso
+                    </button>
+                  </form>
+                )}
+              </div>
+            </div>
+
+            {/* RIGHT SIDEBAR: Detailed Product Card Sheet */}
+            <div className="lg:col-span-8">
+              {selectedProduct ? (
+                <div className="bg-white rounded-3xl overflow-hidden border border-stone-250/60 p-6.5 space-y-7 shadow-sm" id="product-detail-sheet">
+
+                  {/* Title & Badge */}
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-stone-150">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-2xl font-black text-[#0f4c3a] font-sans tracking-tight">{selectedProduct.name}</h2>
+                        {isAdminMode && (
+                          <div className="flex items-center gap-1.55">
+                            <button
+                              id="btn-edit-product"
+                              onClick={() => handleOpenEditForm(selectedProduct)}
+                              className="p-1 px-2.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-805 text-xs flex items-center gap-1 border border-emerald-100 cursor-pointer font-bold"
+                              title="Editar producto"
+                            >
+                              <Edit2 className="w-3 h-3" /> Editar Ficha
+                            </button>
+                            <button
+                              id="btn-delete-product"
+                              onClick={() => handleDeleteProduct(selectedProduct.id)}
+                              className="p-1 px-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 text-xs flex items-center gap-1 border border-red-100 cursor-pointer font-bold"
+                              title="Eliminar producto"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-stone-500 italic mt-1 font-serif">Nombre científico: <b className="font-serif font-bold text-[#a07c39]">{selectedProduct.scientificName}</b></p>
+                    </div>
+                    <div>
+                      {getStatusBadge(getProductStatus(selectedProduct, simulatedMonth))}
+                    </div>
+                  </div>
+
+                  {/* Quick Grid Description */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+                    <div className="space-y-4">
+                      <h4 className="text-[10px] font-black uppercase text-[#0f4c3a] tracking-widest font-mono">Ficha de Biodiversidad</h4>
+                      <p className="text-xs text-stone-700 leading-relaxed font-serif">
+                        {selectedProduct.description}
+                      </p>
+
+                      <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200/50">
+                        <h4 className="text-[10px] font-black uppercase text-stone-500 tracking-wider mb-2.5 font-mono">Características Clave</h4>
+                        <ul className="space-y-2">
+                          {selectedProduct.characteristics.map((char, index) => (
+                            <li key={index} className="text-xs text-stone-655 flex items-start gap-2 font-serif leading-relaxed">
+                              <span className="text-[#a07c39] mt-0.5">•</span>
+                              <span>{char}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+
+                    {/* Radial or matrix Month availability grid */}
+                    <div className="bg-stone-50 rounded-2xl p-4.5 border border-stone-200/50 flex flex-col justify-between shadow-xs">
+                      <div>
+                        <h4 className="text-[10px] font-black uppercase text-stone-500 tracking-wider mb-2 flex items-center gap-1.5 font-mono">
+                          <Calendar className="w-4 h-4 text-emerald-800" />
+                          Disponibilidad Estacional
+                        </h4>
+                        <p className="text-[10.5px] text-stone-600 mb-4 font-sans leading-relaxed">
+                          Los meses destacados en verde indican la temporada de cosecha silvestre autorizada por ciclos ecológicos.
+                        </p>
+
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {MONTH_NAMES.map((mName, index) => {
+                            const isSeason = selectedProduct.seasonMonths.includes(index + 1);
+                            const isCurrent = simulatedMonth === index + 1;
+
+                            return (
+                              <div
+                                key={mName}
+                                className={`p-2 rounded-lg text-center text-[9.5px] uppercase tracking-wide font-bold transition-all border ${isSeason
+                                  ? isCurrent
+                                    ? "bg-[#0f4c3a] text-white border-emerald-800 scale-105 shadow-sm"
+                                    : "bg-emerald-50 text-[#0f4c3a] border-emerald-100"
+                                  : isCurrent
+                                    ? "bg-stone-200/80 text-stone-700 border-stone-300"
+                                    : "bg-stone-100 text-stone-400 border-transparent opacity-80"
+                                  }`}
+                              >
+                                {mName.substring(0, 3)}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="mt-4 pt-3.5 border-t border-stone-200/60 flex items-center justify-between text-[11px] font-bold font-mono">
+                        <span className="text-stone-450 uppercase tracking-widest text-[9px]">Municipio del Origen:</span>
+                        <span className="text-emerald-850 flex items-center gap-1 font-semibold">
+                          <MapPin className="w-3.5 h-3.5" />
+                          {selectedProduct.origin.town}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Gastronomic recommendations / Usos en Cocina */}
+                  <div className="bg-stone-50/60 p-5 rounded-2xl border border-stone-200/50">
+                    <div className="flex items-center justify-between mb-3.5">
+                      <h4 className="text-[10px] font-black uppercase text-[#0f4c3a] tracking-widest flex items-center gap-1.5 font-mono">
+                        <ChefHat className="w-4 h-4 text-[#0f4c3a]" /> Recomendaciones y Usos
+                      </h4>
+                      <button
+                        onClick={() => setActiveTab("chef")}
+                        className="text-[10px] font-bold text-[#a07c39] bg-amber-50 px-3 py-1.5 rounded-full border border-[#c5a059]/30 hover:bg-[#a07c39] hover:text-white transition-all flex items-center gap-1 shrink-0 cursor-pointer"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 fill-current" /> Consultar Ideas AI
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {selectedProduct.gastronomicUses.map((use, idx) => (
+                        <div key={idx} className="bg-white p-3 rounded-xl border border-stone-200 flex items-start gap-2.5">
+                          <div className="bg-emerald-50 text-[#0f4c3a] font-sans font-bold rounded-lg w-5 h-5 flex items-center justify-center text-[10px] mt-0.5 shrink-0 border border-emerald-100">
+                            {idx + 1}
+                          </div>
+                          <span className="text-xs text-stone-700 leading-relaxed font-serif">{use}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Contactos de Productores o Asociaciones Autorizadas */}
+                  <div className="space-y-3.5">
+                    <h4 className="text-[10px] font-black uppercase text-[#0f4c3a] tracking-widest font-mono">Coordinación de Abastecimiento Directo</h4>
+                    <p className="text-[10.5px] text-stone-650 leading-relaxed -mt-1.5 font-sans">
+                      Para coordinar logística, volúmenes de acopio sustentable comunitario y precios justos, póngase en contacto directo con los recolectores de la Chiquitania. <strong>La FAN actúa únicamente como facilitador técnico.</strong> El contacto de WhatsApp/Teléfono es directo.
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {selectedProduct.contacts.length === 0 ? (
+                        <div className="col-span-full bg-stone-50 p-4 rounded-xl text-center border border-dashed border-stone-200 text-stone-500 text-xs">
+                          No se han ingresado contactos todavía para este producto silvestre.
+                        </div>
+                      ) : (
+                        selectedProduct.contacts.map((c) => (
+                          <div key={c.id} className="bg-stone-50/70 p-4 rounded-2xl border border-stone-200 flex flex-col justify-between hover:bg-stone-50 transition-colors">
+                            <div>
+                              <div className="flex justify-between items-start gap-2">
+                                <h5 className="text-xs font-bold text-stone-900">{c.name}</h5>
+                                <span className={`text-[8.5px] font-mono uppercase font-bold px-2 py-0.5 rounded border ${c.type === "Asociación" ? "bg-emerald-50 text-emerald-800 border-emerald-150" :
+                                  c.type === "Productor" ? "bg-sky-50 text-sky-800 border-sky-150" :
+                                    c.type === "Tienda" ? "bg-amber-50 text-amber-850 border-amber-100" :
+                                      "bg-stone-100 text-stone-500 border-stone-200"
+                                  }`}>
+                                  {c.type}
+                                </span>
+                              </div>
+                              <p className="text-[10.5px] text-stone-500 italic mt-1.5 font-serif">{c.role}</p>
+                              <p className="text-[10px] text-stone-600 flex items-center gap-1.5 mt-1 font-sans">
+                                <MapPin className="w-3 h-3 text-emerald-700" />
+                                {c.location}
+                              </p>
+                            </div>
+
+                            <div className="mt-4 pt-3 border-t border-stone-200/60 flex items-center justify-between">
+                              <span className="text-[10.5px] text-stone-700 font-bold font-mono">{c.phone}</span>
+                              <a
+                                href={`https://api.whatsapp.com/send?phone=${c.phone.replace(/[\s+]/g, "")}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="bg-emerald-700 hover:bg-emerald-850 text-white text-[10.5px] font-bold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-xs"
+                              >
+                                <Phone className="w-3 h-3" /> WhatsApp
+                              </a>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Ficha de Recetas (Del Bosque Chiquitano a la Mesa) */}
+                  <div className="space-y-4">
+                    <h4 className="text-[10.5px] font-black uppercase text-[#0f4c3a] tracking-widest font-mono">Recetario: "Del Bosque Chiquitano a la Mesa"</h4>
+
+                    {selectedProduct.recipes.length === 0 ? (
+                      <div className="bg-stone-50 p-4 rounded-xl text-center border border-dashed border-stone-200 text-stone-500 text-xs font-sans">
+                        Para ver recetas, agrega una receta a esta ficha ingresando al Backoffice.
+                      </div>
+                    ) : (
+                      selectedProduct.recipes.map((recipe) => (
+                        <div key={recipe.id} className="bg-stone-50/80 p-5 rounded-3xl border border-stone-200 space-y-4 shadow-2xs">
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-3 border-b border-stone-200">
+                            <div>
+                              <span className="text-[9px] uppercase tracking-wider font-bold text-[#a07c39] bg-amber-50/60 px-2.5 py-0.5 rounded border border-amber-100">
+                                Receta del Recetario FAN de Autor
+                              </span>
+                              <h5 className="text-base font-extrabold text-stone-900 mt-1">{recipe.title}</h5>
+                            </div>
+                            <div className="flex items-center gap-2 text-[10px]">
+                              <span className="bg-white text-stone-600 px-2 py-0.5 rounded border border-stone-200">
+                                Porciones: {recipe.servings}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded font-bold border ${recipe.difficulty === "Fácil" ? "bg-emerald-50 text-emerald-800 border-emerald-100" :
+                                recipe.difficulty === "Medio" ? "bg-amber-50 text-amber-800 border-amber-150" :
+                                  "bg-rose-50 text-rose-800 border-rose-150"
+                                }`}>
+                                Dificultad: {recipe.difficulty}
+                              </span>
+                            </div>
+                          </div>
+
+                          <p className="text-xs text-stone-600 italic">
+                            "{recipe.description}"
+                          </p>
+
+                          <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-start">
+                            {/* Ingredients */}
+                            <div className="md:col-span-2 space-y-2">
+                              <h6 className="text-[10px] font-bold uppercase text-stone-500 tracking-wider font-mono">Ingredientes requeridos:</h6>
+                              <ul className="space-y-1.5 bg-white p-3.5 rounded-2xl border border-stone-200 animate-fadeIn">
+                                {recipe.ingredients.map((ing, i) => (
+                                  <li key={i} className="text-xs text-stone-700 flex items-start gap-1.5 font-serif">
+                                    <span className="text-[#a07c39] mt-0.5">•</span>
+                                    <span>{ing}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+
+                            {/* Method instructions */}
+                            <div className="md:col-span-3 space-y-2">
+                              <h6 className="text-[10px] font-bold uppercase text-stone-500 tracking-wider font-mono">Preparación paso a paso:</h6>
+                              <ol className="space-y-3.5 pr-2">
+                                {recipe.instructions.map((step, idx) => (
+                                  <li key={idx} className="text-xs text-stone-700 flex items-start gap-3">
+                                    <span className="bg-white border border-stone-200 text-stone-700 font-bold w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[10px] mt-0.5">
+                                      {idx + 1}
+                                    </span>
+                                    <span className="leading-relaxed font-serif">{step}</span>
+                                  </li>
+                                ))}
+                              </ol>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                </div>
+              ) : (
+                <div className="text-center py-20 bg-slate-900/15 border border-slate-800 rounded-3xl flex flex-col items-center justify-center">
+                  <Calendar className="w-16 h-16 text-slate-700 stroke-1 mb-3" />
+                  <p className="text-sm text-slate-400">Seleccione un producto forestal del catálogo izquierdo para ver su ficha técnica viva.</p>
+                </div>
+              )}
+            </div>
+
+          </div>
+        )}
+
+        {/* Tab 2: Mapa de Origen */}
+        {activeTab === "map" && (
+          <div className="space-y-6">
+            <InteractiveMap
+              products={products}
+              onSelectProduct={(prod) => {
+                setSelectedProduct(prod);
+                setActiveTab("catalog");
+              }}
+            />
+          </div>
+        )}
+
+        {/* Tab 3: Asistente AI Chef Gemini */}
+        {activeTab === "chef" && (
+          <div className="space-y-6">
+            <AiChef products={products} />
+          </div>
+        )}
+
+        {/* Tab 4: Backoffice / Panel de Administracion */}
+        {activeTab === "admin" && (
+          <div className="space-y-6 bg-[#0b120f] rounded-3xl border border-emerald-950/45 p-6.5 shadow-xl shadow-black/25">
+
+            {/* Header info bar */}
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 pb-4 border-b border-emerald-950/30">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-[#c5a059] bg-[#c5a059]/10 px-3.5 py-1 rounded-full border border-[#c5a059]/25 font-mono">
+                  Soporte de Monitoreo Bioclimático
+                </span>
+                <h3 className="text-xl font-black mt-2 text-[#f5f2eb]">Panel Administrativo de la FAN</h3>
+                <p className="text-xs text-stone-400 font-serif">
+                  Agregue o edite fichas botánicas estacionales y actualice contactos de recolección local de la Chiquitania.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  id="btn-admin-add"
+                  onClick={handleOpenAddForm}
+                  className="bg-[#c5a059] hover:bg-[#d9b773] text-[#070b09] font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow transition-all"
+                >
+                  <Plus className="w-4 h-4 text-[#070b09] stroke-2" /> Agregar Especie Silvestre
+                </button>
+                <button
+                  id="btn-admin-exit"
+                  onClick={() => {
+                    setActiveTab("catalog");
+                  }}
+                  className="bg-[#121c17] hover:bg-[#192b21] hover:text-stone-100 text-[#40c38e] border border-emerald-900/30 px-4 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+                >
+                  Volver al Catálogo
+                </button>
+              </div>
+            </div>
+
+            {/* Admin Add/Edit Form Overlay */}
+            {showAdminForm && (
+              <form onSubmit={handleSubmitProduct} className="bg-[#070b09] p-6 rounded-3xl border border-emerald-950/45 space-y-6 shadow-2xl">
+                <div className="flex justify-between items-center pb-4 border-b border-emerald-955/20">
+                  <h4 className="text-sm font-extrabold text-[#c5a059] uppercase tracking-wider font-mono">
+                    {editingProduct ? `Editando Ficha de ${editingProduct.name}` : "Registrar Nueva Especie de la Chiquitania"}
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminForm(false)}
+                    className="p-1.5 rounded-full hover:bg-[#121c17] text-stone-400 hover:text-stone-200 cursor-pointer transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                  {/* General details */}
+                  <div className="md:col-span-6 space-y-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Nombre Comercial / Local *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ej. Almendra Chiquitana, Totaí, Copaibo"
+                        value={formName}
+                        onChange={(e) => setFormName(e.target.value)}
+                        className="w-full p-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:border-emerald-700 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Nombre Científico *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ej. Dipteryx alata"
+                        value={formScientificName}
+                        onChange={(e) => setFormScientificName(e.target.value)}
+                        className="w-full p-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 font-serif italic focus:border-emerald-700 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Categoría de Especie *</label>
+                      <select
+                        value={formCategory}
+                        onChange={(e) => setFormCategory(e.target.value as Product["category"])}
+                        className="w-full p-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-250 focus:border-emerald-700"
+                      >
+                        {CATEGORIES.map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Descripción del Recurso Forestal *</label>
+                      <textarea
+                        required
+                        rows={3}
+                        placeholder="Escribe la descripción de la especie, cómo florece en el bosque, su aporte ecológico..."
+                        value={formDescription}
+                        onChange={(e) => setFormDescription(e.target.value)}
+                        className="w-full p-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:border-emerald-700 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Características (una por línea) *</label>
+                      <textarea
+                        rows={3}
+                        placeholder="Ej: Rico en proteínas del bosque...&#10;Textura sumamente aceitosa..."
+                        value={formCharacteristics}
+                        onChange={(e) => setFormCharacteristics(e.target.value)}
+                        className="w-full p-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:border-emerald-700 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Seasonal and Location info */}
+                  <div className="md:col-span-6 space-y-4">
+                    <div className="bg-slate-900 p-4 rounded-2xl border border-slate-850">
+                      <label className="text-[10px] font-bold text-[#d4af37] uppercase tracking-widest block mb-2">Selecciona meses de temporada *</label>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {MONTH_NAMES.map((name, idx) => {
+                          const monthNum = idx + 1;
+                          const isSelected = formSeasonMonths.includes(monthNum);
+
+                          return (
+                            <button
+                              key={name}
+                              type="button"
+                              onClick={() => handleToggleMonth(monthNum)}
+                              className={`p-2 rounded text-[10px] font-bold text-center border cursor-pointer transition-all ${isSelected
+                                ? "bg-emerald-950 text-emerald-400 border-emerald-700"
+                                : "bg-slate-950 text-slate-500 border-slate-900 hover:text-slate-350"
+                                }`}
+                            >
+                              {name.substring(0, 3)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Municipio de Origen principal</label>
+                        <select
+                          value={formTown}
+                          onChange={(e) => setFormTown(e.target.value)}
+                          className="w-full p-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:border-emerald-700"
+                        >
+                          <option value="Concepción">Concepción</option>
+                          <option value="San Ignacio de Velasco">San Ignacio de Velasco</option>
+                          <option value="Lomerío">Lomerío</option>
+                          <option value="San José de Chiquitos">San Jose de Chiquitos</option>
+                          <option value="Roboré">Roboré</option>
+                          <option value="Santiago de Chiquitos">Santiago de Chiquitos</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Usos Gastronómicos (una por línea)</label>
+                        <textarea
+                          rows={2.5}
+                          placeholder="Ej: Ideal para pestos chiquitanos...&#10;Aceite para marinado de carnes nativas..."
+                          value={formUses}
+                          onChange={(e) => setFormUses(e.target.value)}
+                          className="w-full p-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:border-emerald-700 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-mono text-slate-500 uppercase block">Posición X en mapa (%)</label>
+                        <input
+                          type="number"
+                          min="10"
+                          max="90"
+                          value={formLat}
+                          onChange={(e) => setFormLat(parseInt(e.target.value))}
+                          className="w-full p-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:border-emerald-700 focus:outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-mono text-slate-500 uppercase block">Posición Y en mapa (%)</label>
+                        <input
+                          type="number"
+                          min="10"
+                          max="90"
+                          value={formLng}
+                          onChange={(e) => setFormLng(parseInt(e.target.value))}
+                          className="w-full p-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:border-emerald-700 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sub-form section: Contacts addition */}
+                <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-4">
+                  <h5 className="text-xs font-bold text-[#d4af37] uppercase tracking-wider">Acopios & Contactos autorizados para el producto</h5>
+
+                  {/* Current Contacts List inside form */}
+                  {formContacts.length > 0 && (
+                    <div className="grid grid-cols-2 gap-3 mb-4">
+                      {formContacts.map(c => (
+                        <div key={c.id} className="p-2 px-3 bg-slate-950 rounded-lg text-xs flex justify-between items-center border border-slate-850">
+                          <div>
+                            <span className="font-bold text-slate-100">{c.name}</span>
+                            <span className="text-[9.5px] text-slate-400 block">{c.type} • {c.phone}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveContact(c.id)}
+                            className="text-red-400 text-xs p-1 hover:bg-slate-900 rounded"
+                          >
+                            Remover
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+                    <div className="space-y-1">
+                      <input
+                        type="text"
+                        placeholder="Nombre comercial/asociación"
+                        value={newContactName}
+                        onChange={(e) => setNewContactName(e.target.value)}
+                        className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <input
+                        type="text"
+                        placeholder="Rol (ej: Acopio mayorista)"
+                        value={newContactRole}
+                        onChange={(e) => setNewContactRole(e.target.value)}
+                        className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <select
+                        value={newContactType}
+                        onChange={(e) => setNewContactType(e.target.value as Contact["type"])}
+                        className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-xs"
+                      >
+                        <option value="Asociación">Asociación</option>
+                        <option value="Productor">Productor</option>
+                        <option value="Tienda">Tienda</option>
+                        <option value="Proveedor">Proveedor</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <input
+                        type="text"
+                        placeholder="Teléfono/WhatsApp (+591)"
+                        value={newContactPhone}
+                        onChange={(e) => setNewContactPhone(e.target.value)}
+                        className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-xs"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddContact}
+                      className="bg-slate-800 hover:bg-slate-700 text-[#d4af37] text-xs font-bold py-2 px-3 rounded-lg cursor-pointer"
+                    >
+                      Añadir Contacto
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sub-form section: Recipes addition */}
+                <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-4">
+                  <h5 className="text-xs font-bold text-[#d4af37] uppercase tracking-wider">Recetas "Del Bosque Chiquitano a la Mesa"</h5>
+
+                  {formRecipes.length > 0 && (
+                    <div className="space-y-2 mb-4">
+                      {formRecipes.map(r => (
+                        <div key={r.id} className="p-2.5 bg-slate-950 rounded-lg text-xs flex justify-between items-center border border-slate-850">
+                          <div>
+                            <span className="font-bold text-slate-100">{r.title}</span>
+                            <span className="text-[10px] text-slate-400 block">{r.difficulty} • {r.servings}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveRecipe(r.id)}
+                            className="text-red-400 text-xs p-1 hover:bg-slate-900 rounded"
+                          >
+                            Remover Receta
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-3 gap-3">
+                      <input
+                        type="text"
+                        placeholder="Título de la receta..."
+                        value={newRecipeTitle}
+                        onChange={(e) => setNewRecipeTitle(e.target.value)}
+                        className="col-span-2 w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-xs"
+                      />
+                      <select
+                        value={newRecipeDifficulty}
+                        onChange={(e) => setNewRecipeDifficulty(e.target.value as Recipe["difficulty"])}
+                        className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-xs"
+                      >
+                        <option value="Fácil">Fácil</option>
+                        <option value="Medio">Medio</option>
+                        <option value="Avanzado">Avanzado</option>
+                      </select>
+                    </div>
+
+                    <textarea
+                      rows={1.5}
+                      placeholder="Breve descripción del concepto o historia de la receta..."
+                      value={newRecipeDesc}
+                      onChange={(e) => setNewRecipeDesc(e.target.value)}
+                      className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-xs"
+                    />
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <textarea
+                        rows={2.5}
+                        placeholder="Ingredientes (uno por línea)..."
+                        value={newRecipeIngredients}
+                        onChange={(e) => setNewRecipeIngredients(e.target.value)}
+                        className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono"
+                      />
+                      <textarea
+                        rows={2.5}
+                        placeholder="Pasos/Instrucciones de preparación (uno por línea)..."
+                        value={newRecipeInstructions}
+                        onChange={(e) => setNewRecipeInstructions(e.target.value)}
+                        className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono"
+                      />
+                    </div>
+
+                    <div className="flex justify-between items-center bg-slate-950 p-2.5 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-400 uppercase font-bold">Porciones:</span>
+                        <input
+                          type="text"
+                          value={newRecipeServings}
+                          onChange={(e) => setNewRecipeServings(e.target.value)}
+                          className="p-1 px-2 bg-slate-900 border border-slate-800 rounded text-xs w-28 text-slate-100"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleAddRecipe}
+                        className="bg-slate-800 hover:bg-slate-700 text-[#d4af37] text-xs font-bold py-2 px-4 rounded-lg cursor-pointer"
+                      >
+                        Añadir Receta a Ficha
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-900 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAdminForm(false);
+                      setEditingProduct(null);
+                    }}
+                    className="p-3 bg-slate-900 hover:bg-slate-850 text-slate-400 text-xs font-bold rounded-xl cursor-pointer"
+                  >
+                    Descartar Registro
+                  </button>
+                  <button
+                    type="submit"
+                    className="p-3 bg-emerald-600 hover:bg-emerald-500 text-slate-950 text-xs font-black rounded-xl cursor-pointer"
+                  >
+                    {editingProduct ? "Guardar Cambios de Ficha" : "Registrar Especie Autorizada"}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* List of current editable Products */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Listado general de edición</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {products.map(prod => (
+                  <div key={prod.id} className="p-4 bg-slate-950 rounded-2xl border border-slate-800 flex justify-between items-start gap-4 hover:border-slate-700 transition-all">
+                    <div>
+                      <h5 className="font-extrabold text-sm text-slate-200">{prod.name}</h5>
+                      <span className="text-[10px] font-serif italic text-slate-500 block">{prod.scientificName}</span>
+                      <span className="inline-block mt-2 text-[10px] bg-slate-900 text-emerald-400 px-2 py-0.5 rounded border border-slate-800">
+                        {prod.category}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => { handleOpenEditForm(prod); window.scrollTo({ top: 300, behavior: "smooth" }); }}
+                        className="p-2 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-xs font-bold text-slate-200 border border-slate-800 flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" /> Editar
+                      </button>
+                      <button
+                        type="button"
+                        id={`btn-del-${prod.id}`}
+                        onClick={() => handleDeleteProduct(prod.id)}
+                        className="p-2 py-1.5 rounded-lg bg-red-950/20 hover:bg-red-900/40 text-xs font-bold text-red-400 border border-red-900/30 flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Borrar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Main Footer */}
+      <footer className="bg-[#B3E5FC] mt-16 border-t border-sky-300/60 py-12 text-[#333333]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-2.5">
+              <LogoMark className="h-11 w-auto" />
+            </div>
+            <p className="text-xs text-[#333333] leading-relaxed max-w-xs font-serif">
+              La Fundación Amigos de la Naturaleza (FAN) es una institución boliviana sin fines de lucro enfocada en la conservación de la biodiversidad y el desarrollo sustentable en estrecha colaboración con las comunidades originarias de la Chiquitania.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <h5 className="font-bold text-[10px] uppercase tracking-wider text-[#a07c39] font-mono">Sobre el Biocalendario</h5>
+            <p className="text-xs text-[#333333] leading-relaxed font-serif">
+              Consumir productos forestales no-maderables genera ingresos vitales que ayudan a las familias rurales a prevenir incendios descontrolados, proteger el sotobosque primario y mitigar el avance de la deforestación agrícola en Santa Cruz.
+            </p>
+          </div>
+
+          <div className="bg-[#9FD4F0]/70 p-4.5 rounded-2xl border border-sky-300/70 space-y-2 text-center md:text-left">
+            <p className="text-[10px] uppercase font-black tracking-widest text-[#a07c39] font-mono">Pacto de Sostenibilidad</p>
+            <p className="text-xs text-[#1A1A1A] font-bold">Uso y Consumo Responsable</p>
+            <p className="text-[11px] text-[#333333] leading-relaxed font-serif">
+              Los alimentos del bosque chiquitano preservados en este calendario estacional provienen de áreas de manejo forestal comunitario certificado, promoviendo cosechas amigables con los ciclos ecosistemas bolivianos.
+            </p>
+          </div>
+
+        </div>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 border-t border-sky-300/50 mt-10 pt-5 text-center text-[10px] text-[#333333] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <span>© 2026 Fundación Amigos de la Naturaleza. Todos los derechos reservados. Santa Cruz, Bolivia.</span>
+          <span className="flex items-center justify-center gap-1.5 font-sans text-[#333333] hover:text-[#1A1A1A] transition-colors">
+            Conectando a Productores de la Chiquitania y Cocinas Sostenibles de Bolivia <Heart className="w-3.5 h-3.5 text-rose-500 fill-current" />
+          </span>
+        </div>
+      </footer>
+
+      {/* Auth Modal (simulated login/register) */}
+      {showAuthModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowAuthModal(false)}>
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <LogoMark className="h-8 w-auto" />
+              <button onClick={() => setShowAuthModal(false)} className="text-stone-400 hover:text-stone-700 cursor-pointer"><X className="w-5 h-5" /></button>
+            </div>
+            <h3 className="text-lg font-black text-[#0f4c3a]">{authMode === "login" ? "Iniciar sesión" : "Crear cuenta"}</h3>
+            <p className="text-xs text-stone-500 mb-4">Accede para gestionar tus alertas de alta cosecha.</p>
+            <form onSubmit={handleAuthSubmit} className="space-y-2.5">
+              {authMode === "register" && (
+                <input type="text" placeholder="Nombre completo" value={authName} onChange={(e) => setAuthName(e.target.value)} className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none focus:border-[#0f4c3a]/50" />
+              )}
+              <input type="email" required placeholder="Correo electrónico" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none focus:border-[#0f4c3a]/50" />
+              <input type="password" required placeholder="Contraseña" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none focus:border-[#0f4c3a]/50" />
+              {authError && <p className="text-[11px] text-red-600 font-semibold">{authError}</p>}
+              <button type="submit" className="w-full py-2.5 bg-[#0f4c3a] hover:bg-[#0c3e2f] text-white font-bold text-sm rounded-xl cursor-pointer">
+                {authMode === "login" ? "Entrar" : "Registrarme"}
+              </button>
+            </form>
+            <button onClick={() => { setAuthMode(authMode === "login" ? "register" : "login"); setAuthError(""); }} className="w-full text-center text-[11px] text-stone-500 hover:text-[#0f4c3a] mt-3 cursor-pointer">
+              {authMode === "login" ? "¿No tienes cuenta? Regístrate" : "¿Ya tienes cuenta? Inicia sesión"}
+            </button>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+// Compact helper icon because standard lucide doesn't have custom high-detail leaves
+function LeafIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 3.5 1 9.8a7 7 0 0 1-9 8.2z" />
+      <path d="M19 2L11 11" />
+    </svg>
+  );
+}
