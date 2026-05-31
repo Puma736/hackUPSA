@@ -1,9 +1,8 @@
 {
-  "buildCommand": "cd calendario-vivo-del-bosque-chiquitanoP && npm install && npm run build",
-  "installCommand": "npm install",
-  "outputDirectory": "calendario-vivo-del-bosque-chiquitanoP/dist",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
   "functions": {
-    "calendario-vivo-del-bosque-chiquitanoP/dist/server.cjs": {
+    "dist/server.cjs": {
       "runtime": "nodejs20.x"
     }
   }
